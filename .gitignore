@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+all_id_in_channel.txt
+grabber.session
+struct.json

@@ -1,2 +1,6 @@
 # grabber_tg
--_-
+## -_-
+
+## take tg posts from other public
+
+## telethon
