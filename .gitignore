@@ -103,6 +103,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env2
 .venv
 env/
 venv/
@@ -130,4 +131,5 @@ dmypy.json
 
 all_id_in_channel.txt
 grabber.session
+grabber.session-journal
 struct.json

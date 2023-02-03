@@ -1,14 +1,13 @@
+import os
+import logging
+import random as r
+import pytz
+from datetime import datetime, timedelta
+from time import sleep
 from telethon import TelegramClient
 from telethon.tl import types
 from telethon.tl.functions.channels import JoinChannelRequest
 from dotenv import load_dotenv
-import logging
-from datetime import datetime, timedelta
-import os
-from time import sleep
-import random as r
-import pytz
-
 
 load_dotenv()
 
@@ -16,13 +15,12 @@ API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 SESSION = os.getenv("SESSION")
 CHANNELS = [
-    "sashaonline",
+    "idontall",
+    "sarcasm_orgasm",
+    "authenticationForRandomGuys",
     "thememesandpepes",
-    "buhcumlter",
-    "seniorpy",
-    "breakingmash",
-    "evopublikk",
-    "avansanebudet",
+    "memidlyageniev",
+    "meminvest"
 ]
 LIMIT_MSG = 100
 MY_CHANNEL = os.getenv("MY_CHANNEL")
