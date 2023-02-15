@@ -4,193 +4,227 @@ import random as r
 import pytz
 from datetime import datetime, timedelta
 from time import sleep
-from telethon import TelegramClient
 from telethon.tl import types
 from telethon.tl.functions.channels import JoinChannelRequest
-from dotenv import load_dotenv
-
-load_dotenv()
-
-API_ID = os.getenv("API_ID")
-API_HASH = os.getenv("API_HASH")
-SESSION = os.getenv("SESSION")
-CHANNELS = [
-    "idontall",
-    "sarcasm_orgasm",
-    "authenticationForRandomGuys",
-    "thememesandpepes",
-    "memidlyageniev",
-    "meminvest"
-]
-LIMIT_MSG = 100
-MY_CHANNEL = os.getenv("MY_CHANNEL")
-FILE_PATH_ID = "./all_id_in_channel.txt"
-DELAY = 2  # hours,
-LIMIT_MESSAGE_SEND = DELAY * 10
-client = TelegramClient(SESSION, API_ID, API_HASH)
-
-logging.basicConfig(level="INFO", filename="bot.log")
+from telethon import TelegramClient
+import re
 
 
-async def get_channel_count_member():
-    channel_with_entity = {}
-    channel_member_count = {}
-    for channel in CHANNELS:
-        channel_entity = await client.get_entity(channel)
-        channel_with_entity[channel] = channel_entity
-        await client(JoinChannelRequest(channel))
-    async for dialog in client.iter_dialogs():
-        if dialog.is_channel:
-            for channel in channel_with_entity.keys():
-                if dialog.name == channel_with_entity[channel].title:
-                    channel_member_count[
-                        channel_with_entity[channel].id
-                    ] = dialog.entity.participants_count
-    logging.info(f"Users: {channel_member_count}")
-    return channel_member_count
+class Handler():
+
+    channel_member_count: dict
+    channel_last_id: dict
+    all_messages: list
+    favorite_msg: list
+
+    def __init__(
+            self,
+            channels: tuple,
+            client: TelegramClient,
+            my_channel: str,
+            file_path: str,
+            delay: int,
+            limit_msg: int,
+            limit_msg_send: int) -> None:
+        self.channels = channels
+        self.client = client
+        self.my_channel = my_channel
+        self.file_path = file_path
+        self.delay = delay
+        self.limit_msg = limit_msg
+        self.limit_msg_send = limit_msg_send
+        self.channel_member_count = {}
+        self.channel_last_id = {}
+        self.all_messages = []
+        self.favorite_msg = []
 
 
-async def random_sum_to(n, num_terms=None):
-    num_terms = (num_terms or r.randint(2, n)) - 1
-    a = r.sample(range(1, n), num_terms) + [0, n]
-    list.sort(a)
-    return [a[i + 1] - a[i] for i in range(len(a) - 1)]
+    async def recive_channel_count_member(self) -> None:
+        """
+        This function gets the number of members in each channel by creating two
+        dictionaries, joining each channel, and iterating through the dialogs
+        to find the channel name and participant count. It then logs the users
+        and returns the channel_member_count dictionary.
+        """
+        channel_with_entity = {}
+        self.channel_member_count = {}
+        for channel in self.channels:
+            channel_entity = await self.client.get_entity(channel)
+            channel_with_entity[channel] = channel_entity
+            await self.client(JoinChannelRequest(channel))
+        async for dialog in self.client.iter_dialogs():
+            if dialog.is_channel:
+                for channel in channel_with_entity.keys():
+                    if dialog.name == channel_with_entity[channel].title:
+                        self.channel_member_count[
+                            channel_with_entity[channel].id
+                        ] = dialog.entity.participants_count
+        logging.info(f"Users: {self.channel_member_count}")
 
 
-async def dump_all_messages() -> list:
-    all_messages = []
+    async def get_random_time(self) -> list:
+        """
+        This is an asyncronous function that generates a random sum of numbers
+        up to a given number. It takes two parameters, n (the maximum number)
+        and num_terms (the number of terms in the sum).
+        It creates a list of numbers between 1 and n, adds 0 and n to the list,
+        sorts the list, and returns a list of differences between each number
+        in the list.
+        """
+        if len(self.favorite_msg) == 0:
+            return []
+        num_terms = len(self.favorite_msg) - 1
+        n = self.delay * 3600
+        a = r.sample(range(1, n), num_terms) + [0, n]
+        list.sort(a)
+        return [a[i + 1] - a[i] for i in range(len(a) - 1)]
 
-    date = datetime.utcnow() - timedelta(hours=(DELAY + 1))
-    date_start = datetime.utcnow() - timedelta(hours=1)
 
-    logging.info("dump_all_messages")
-    logging.info(date)
-    logging.info(date_start)
+    async def dump_all_messages(self) -> list:
+        """
+        Function that retrieves messages from a list of channels, stores them in
+        a list, and writes the last ID of each channel to a file.
+        """
 
-    channel_last_id = {}
+        date = datetime.utcnow() - timedelta(hours=(self.delay + 1))
+        date_start = datetime.utcnow() - timedelta(hours=1)
 
-    if os.path.isfile(FILE_PATH_ID):
-        with open(FILE_PATH_ID, "r", encoding="utf8") as file:
-            for line in file:
-                (key, val) = line.split()
-                channel_last_id[key] = int(val)
+        logging.info("dump_all_messages")
+        logging.info(date)
+        logging.info(date_start)
 
-    for channel in CHANNELS:
-        if channel not in channel_last_id.keys():
-            channel_last_id[channel] = 1
+        if os.path.isfile(self.file_path):
+            with open(self.file_path, "r", encoding="utf8") as file:
+                for line in file:
+                    (key, val) = line.split()
+                    self.channel_last_id[key] = int(val)
 
-    for channel in CHANNELS:
-        group_message = []
-        last_grouped_id = None
+        for channel in self.channels:
+            if channel not in self.channel_last_id.keys():
+                self.channel_last_id[channel] = 1
 
-        async for message in client.iter_messages(
-            entity=channel,
-            limit=LIMIT_MSG,
-            offset_date=date,
-            reverse=True,
-        ):
-            if (
-                message.fwd_from is None
-                and (
-                    type(message.media) == types.MessageMediaPhoto
-                    or type(message.media) == types.MessageMediaDocument
-                )
-                and message.date <= date_start.replace(tzinfo=pytz.utc)
+        for channel in self.channels:
+            group_message = []
+            last_grouped_id = None
+
+            async for message in self.client.iter_messages(
+                entity=channel,
+                limit=self.limit_msg,
+                offset_date=date,
+                reverse=True,
             ):
-                if channel_last_id[channel] < message.id:
-                    if message.grouped_id is not None:
-                        if last_grouped_id is None:
-                            group_message.append(message)
-                            last_grouped_id = message.grouped_id
-                            channel_last_id[channel] = message.id
-                        elif last_grouped_id == message.grouped_id:
-                            group_message.append(message)
-                            channel_last_id[channel] = message.id
-                        elif last_grouped_id != message.grouped_id:
-                            all_messages.append(group_message[::])
-                            group_message.clear()
-                            group_message.append(message)
-                            last_grouped_id = message.grouped_id
-                            channel_last_id[channel] = message.id
-                    else:
-                        if last_grouped_id is not None:
-                            all_messages.append(group_message[::])
-                            group_message.clear()
-                            last_grouped_id = None
-                        channel_last_id[channel] = message.id
-                        all_messages.append(message)
-        if len(group_message) != 0:
-            all_messages.append(group_message[::])
-            group_message.clear
+                if (
+                    message.fwd_from is None
+                    and (
+                        type(message.media) in (
+                        types.MessageMediaPhoto,
+                        types.MessageMediaDocument)
+                    )
+                    and message.date <= date_start.replace(tzinfo=pytz.utc)
+                    and re.search(message.message, r'https://\S+') is not None
+                ):
+                    if self.channel_last_id[channel] < message.id:
+                        if message.grouped_id is not None:
+                            if last_grouped_id is None:
+                                group_message.append(message)
+                                last_grouped_id = message.grouped_id
+                                self.channel_last_id[channel] = message.id
+                            elif last_grouped_id == message.grouped_id:
+                                group_message.append(message)
+                                self.channel_last_id[channel] = message.id
+                            elif last_grouped_id != message.grouped_id:
+                                self.all_messages.append(group_message[::])
+                                group_message.clear()
+                                group_message.append(message)
+                                last_grouped_id = message.grouped_id
+                                self.channel_last_id[channel] = message.id
+                        else:
+                            if last_grouped_id is not None:
+                                self.all_messages.append(group_message[::])
+                                group_message.clear()
+                                last_grouped_id = None
+                            self.channel_last_id[channel] = message.id
+                            self.all_messages.append(message)
+            if len(group_message) != 0:
+                self.all_messages.append(group_message[::])
+                group_message.clear()
 
-    logging.info(f"{len(all_messages)} posts get from channels")
-    return all_messages, channel_last_id
-
-
-async def change_fav_messages(all_messange: list, channel_member_count: dict):
-    def sort_msg(message):
-        if type(message) == list:
-            reactions = message[0].reactions
-            count = channel_member_count[message[0].peer_id.channel_id]
-        else:
-            reactions = message.reactions
-            count = channel_member_count[message.peer_id.channel_id]
-        if reactions is None:
-            return 0
-        else:
-            logging.info(
-                f"count reactions: "
-                f"{sum(reaction.count for reaction in reactions.results)}, "
-                f"count members: {count}"
-            )
-            return sum(reaction.count for reaction in reactions.results)/count
-
-    logging.info("sort all message")
-    favorite_msg = sorted(all_messange, key=sort_msg, reverse=True)
-
-    if len(favorite_msg) <= LIMIT_MESSAGE_SEND:
-        return favorite_msg
-    else:
-        return favorite_msg[:LIMIT_MESSAGE_SEND]
+        logging.info(f"{len(self.all_messages)} posts get from channels")
 
 
-async def send_message(favorite_msg, channel_last_id):
-    count = len(favorite_msg)
-    time_to_send_list = await random_sum_to(DELAY * 3600, count)
-    logging.info(time_to_send_list)
+    async def change_fav_messages(self)-> None:
+        """
+        Select posts with the most reactions.
+        """
+        def sort_msg(message):
+            """
+            This function sorts a list of messages based on the number of reactions
+            they have by getting the reactions and member count for each channel
+            and save the sum of the reaction counts divided by the member
+            count.
+            """
+            if type(message) == list:
+                reactions = message[0].reactions
+                count = self.channel_member_count[message[0].peer_id.channel_id]
+            else:
+                reactions = message.reactions
+                count = self.channel_member_count[message.peer_id.channel_id]
+            if reactions is None:
+                return 0
+            else:
+                logging.info(
+                    f"count reactions: "
+                    f"{sum(reaction.count for reaction in reactions.results)}, "
+                    f"count members: {count}"
+                )
+                return sum(reaction.count for reaction in reactions.results)/count
 
-    with open(FILE_PATH_ID, "w", encoding="utf8") as file:
-        for channel, id in channel_last_id.items():
-            file.write(f"{channel} {id}\n")
-
-    for message in favorite_msg:
-        logging.info("send_message")
-        if type(message) == list:
-            await client.send_message(
-                MY_CHANNEL, file=message, message=message[0].message
-            )
-            logging.info(
-                f"from-{message[0].peer_id.channel_id}, date-{message[0].date}"
-            )
-        else:
-            await client.send_message(entity=MY_CHANNEL, message=message)
-            logging.info(f"from-{message.peer_id.channel_id}, "
-                         f"date-{message.date}")
-
-        sleep(time_to_send_list.pop())
-    time_to_send_list.clear()
-
-
-async def main() -> None:
-    channel_member_count = await get_channel_count_member()
-    while True:
-        all_messages, channel_last_id = await dump_all_messages()
-        favorite_msg = await change_fav_messages(
-            all_messages, channel_member_count
-        )
-        await send_message(favorite_msg, channel_last_id)
+        logging.info("sort all message")
+        self.favorite_msg = sorted(self.all_messages, key=sort_msg, reverse=True)
+        if len(self.favorite_msg) > self.limit_msg_send:
+            self.favorite_msg = self.favorite_msg[:self.limit_msg_send]
 
 
-if __name__ == "__main__":
-    with client:
-        client.loop.run_until_complete(main())
+    async def send_message(self) -> None:
+        """
+        function that sends messages from a list of favorite messages to a
+        specified channel with a delay between each message. It also stores
+        the last ID of the channel in a dictionary and writes it to a file for
+        later use. The function also logs information about the messages sent.
+        """
+        time_to_send_list = await self.get_random_time()
+        logging.info(f'count favorite messages: {len(self.favorite_msg)}')
+        logging.info(f'time to send list: {time_to_send_list}')
+
+        with open(self.file_path, "w", encoding="utf8") as file:
+            for channel, id in self.channel_last_id.items():
+                file.write(f"{channel} {id}\n")
+
+        for message in self.favorite_msg:
+            logging.info("send_message")
+            if type(message) == list:
+                await self.client.send_message(
+                    self.my_channel, file=message, message=message[0].message
+                )
+                logging.info(
+                    f"from-{message[0].peer_id.channel_id}, date-{message[0].date}"
+                )
+            else:
+                await self.client.send_message(entity=self.my_channel, message=message)
+                logging.info(f"from-{message.peer_id.channel_id}, "
+                            f"date-{message.date}")
+
+            sleep(time_to_send_list.pop())
+            logging.info(time_to_send_list)
+        time_to_send_list.clear()
+
+
+    async def handling(self) -> None:
+        """
+        Just ties the rest of the functions together.
+        """
+        await self.dump_all_messages()
+        if (self.all_messages) == 0:
+            sleep(self.delay*3600)
+        await self.change_fav_messages()
+        await self.send_message()
