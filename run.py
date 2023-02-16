@@ -24,6 +24,7 @@ FILE_PATH_ID = "./all_id_in_channel.txt"
 DELAY = 2  # hours,
 LIMIT_MESSAGE_SEND = DELAY * 10
 client = TelegramClient(SESSION, API_ID, API_HASH)
+
 logging.basicConfig(
     level=logging.INFO,
     filemode="w",

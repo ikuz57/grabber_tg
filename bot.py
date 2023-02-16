@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from time import sleep
 from telethon.tl import types
 from telethon.tl.functions.channels import JoinChannelRequest
-from telethon import TelegramClient
+from telethon import TelegramClient, errors
 import re
 
 
@@ -121,7 +121,7 @@ class Handler():
                         types.MessageMediaDocument)
                     )
                     and message.date <= date_start.replace(tzinfo=pytz.utc)
-                    and re.search(message.message, r'https://\S+') is not None
+                    and re.search(message.message, r"https://\S+") is not None
                 ):
                     if self.channel_last_id[channel] < message.id:
                         if message.grouped_id is not None:
@@ -193,29 +193,35 @@ class Handler():
         later use. The function also logs information about the messages sent.
         """
         time_to_send_list = await self.get_random_time()
-        logging.info(f'count favorite messages: {len(self.favorite_msg)}')
-        logging.info(f'time to send list: {time_to_send_list}')
+        logging.info(f"count favorite messages: {len(self.favorite_msg)}")
+        logging.info(f"time to send list: {time_to_send_list}")
 
         with open(self.file_path, "w", encoding="utf8") as file:
             for channel, id in self.channel_last_id.items():
                 file.write(f"{channel} {id}\n")
 
         for message in self.favorite_msg:
-            logging.info("send_message")
-            if type(message) == list:
-                await self.client.send_message(
-                    self.my_channel, file=message, message=message[0].message
-                )
-                logging.info(
-                    f"from-{message[0].peer_id.channel_id}, date-{message[0].date}"
-                )
-            else:
-                await self.client.send_message(entity=self.my_channel, message=message)
-                logging.info(f"from-{message.peer_id.channel_id}, "
-                            f"date-{message.date}")
-
-            sleep(time_to_send_list.pop())
-            logging.info(time_to_send_list)
+            try:
+                logging.info("send_message")
+                if type(message) == list:
+                    await self.client.send_message(
+                        self.my_channel, file=message, message=message[0].message
+                    )
+                    logging.info(
+                        f"from-{message[0].peer_id.channel_id}, date-{message[0].date}"
+                    )
+                else:
+                    await self.client.send_message(entity=self.my_channel, message=message)
+                    logging.info(f"from-{message.peer_id.channel_id}, "
+                                f"date-{message.date}")
+                logging.info(time_to_send_list)
+                sleep(time_to_send_list.pop())
+            except errors.rpcerrorlist.FileReferenceExpiredError:
+                logging.error("The file reference has expired and is no longer valid or "
+                              "it belongs to self-destructing media and cannot be resent "
+                              "(caused by SendMediaRequest)")
+                logging.info(time_to_send_list)
+                sleep(time_to_send_list.pop())
         time_to_send_list.clear()
 
 
@@ -224,7 +230,8 @@ class Handler():
         Just ties the rest of the functions together.
         """
         await self.dump_all_messages()
-        if (self.all_messages) == 0:
+        if (len(self.all_messages)) == 0:
+            logging.info(f'no message to take, sleep {self.delay*3600} sec')
             sleep(self.delay*3600)
         await self.change_fav_messages()
         await self.send_message()
