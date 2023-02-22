@@ -1,11 +1,10 @@
 import os
+import asyncio
 import logging
 import random as r
 import pytz
 from datetime import datetime, timedelta
-from time import sleep
 from telethon.tl import types
-from telethon.tl.functions.channels import JoinChannelRequest
 from telethon import TelegramClient, errors
 import re
 
@@ -38,30 +37,6 @@ class Handler():
         self.all_messages = []
         self.favorite_msg = []
 
-
-    async def recive_channel_count_member(self) -> None:
-        """
-        This function gets the number of members in each channel by creating two
-        dictionaries, joining each channel, and iterating through the dialogs
-        to find the channel name and participant count. It then logs the users
-        and returns the channel_member_count dictionary.
-        """
-        channel_with_entity = {}
-        self.channel_member_count = {}
-        for channel in self.channels:
-            channel_entity = await self.client.get_entity(channel)
-            channel_with_entity[channel] = channel_entity
-            await self.client(JoinChannelRequest(channel))
-        async for dialog in self.client.iter_dialogs():
-            if dialog.is_channel:
-                for channel in channel_with_entity.keys():
-                    if dialog.name == channel_with_entity[channel].title:
-                        self.channel_member_count[
-                            channel_with_entity[channel].id
-                        ] = dialog.entity.participants_count
-        logging.info(f"Users: {self.channel_member_count}")
-
-
     async def get_random_time(self) -> list:
         """
         This is an asyncronous function that generates a random sum of numbers
@@ -78,7 +53,6 @@ class Handler():
         a = r.sample(range(1, n), num_terms) + [0, n]
         list.sort(a)
         return [a[i + 1] - a[i] for i in range(len(a) - 1)]
-
 
     async def dump_all_messages(self) -> list:
         """
@@ -148,27 +122,25 @@ class Handler():
             if len(group_message) != 0:
                 self.all_messages.append(group_message[::])
                 group_message.clear()
-
         logging.info(f"{len(self.all_messages)} posts get from channels")
 
-
-    async def change_fav_messages(self)-> None:
+    async def change_fav_messages(self) -> None:
         """
         Select posts with the most reactions.
         """
         def sort_msg(message):
             """
-            This function sorts a list of messages based on the number of reactions
-            they have by getting the reactions and member count for each channel
-            and save the sum of the reaction counts divided by the member
-            count.
+            This function sorts a list of messages based on the number of
+            reactions they have by getting the reactions and member count
+            for each channel and save the sum of the reaction counts divided
+            by the member count.
             """
             if type(message) == list:
                 reactions = message[0].reactions
-                count = self.channel_member_count[message[0].peer_id.channel_id]
+                count = message[0].views
             else:
                 reactions = message.reactions
-                count = self.channel_member_count[message.peer_id.channel_id]
+                count = message.views
             if reactions is None:
                 return 0
             else:
@@ -177,13 +149,13 @@ class Handler():
                     f"{sum(reaction.count for reaction in reactions.results)}, "
                     f"count members: {count}"
                 )
-                return sum(reaction.count for reaction in reactions.results)/count
+                return sum(
+                    reaction.count for reaction in reactions.results)/count
 
         logging.info("sort all message")
         self.favorite_msg = sorted(self.all_messages, key=sort_msg, reverse=True)
         if len(self.favorite_msg) > self.limit_msg_send:
             self.favorite_msg = self.favorite_msg[:self.limit_msg_send]
-
 
     async def send_message(self) -> None:
         """
@@ -215,13 +187,13 @@ class Handler():
                     logging.info(f"from-{message.peer_id.channel_id}, "
                                 f"date-{message.date}")
                 logging.info(time_to_send_list)
-                sleep(time_to_send_list.pop())
+                await asyncio.sleep(time_to_send_list.pop())
             except errors.rpcerrorlist.FileReferenceExpiredError:
                 logging.error("The file reference has expired and is no longer valid or "
                               "it belongs to self-destructing media and cannot be resent "
                               "(caused by SendMediaRequest)")
                 logging.info(time_to_send_list)
-                sleep(time_to_send_list.pop())
+                await asyncio.sleep(time_to_send_list.pop())
         time_to_send_list.clear()
 
 
@@ -232,6 +204,6 @@ class Handler():
         await self.dump_all_messages()
         if (len(self.all_messages)) == 0:
             logging.info(f'no message to take, sleep {self.delay*3600} sec')
-            sleep(self.delay*3600)
+            await asyncio.sleep(self.delay*3600)
         await self.change_fav_messages()
         await self.send_message()

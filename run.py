@@ -39,7 +39,6 @@ async def main() -> None:
                       my_channel=MY_CHANNEL, file_path=FILE_PATH_ID,
                       delay=DELAY, limit_msg=LIMIT_MSG,
                       limit_msg_send=LIMIT_MESSAGE_SEND)
-    await handler.recive_channel_count_member()
     while True:
         await handler.handling()
 
