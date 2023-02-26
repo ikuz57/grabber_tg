@@ -21,8 +21,8 @@ CHANNELS = [
 LIMIT_MSG = 100
 MY_CHANNEL = os.getenv("MY_CHANNEL")
 FILE_PATH_ID = "./all_id_in_channel.txt"
-DELAY = 2  # hours,
-LIMIT_MESSAGE_SEND = DELAY * 10
+DELAY = 1  # hours,
+LIMIT_MESSAGE_SEND = DELAY * 20
 client = TelegramClient(SESSION, API_ID, API_HASH)
 
 logging.basicConfig(

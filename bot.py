@@ -56,8 +56,8 @@ class Handler():
 
     async def dump_all_messages(self) -> list:
         """
-        Function that retrieves messages from a list of channels, stores them in
-        a list, and writes the last ID of each channel to a file.
+        Function that retrieves messages from a list of channels, stores them
+        in a list, and writes the last ID of each channel to a file.
         """
 
         date = datetime.utcnow() - timedelta(hours=(self.delay + 1))
@@ -146,16 +146,20 @@ class Handler():
             else:
                 logging.info(
                     f"count reactions: "
-                    f"{sum(reaction.count for reaction in reactions.results)}, "
+                    f"{sum(reaction.count for reaction in reactions.results)},"
                     f"count members: {count}"
                 )
                 return sum(
                     reaction.count for reaction in reactions.results)/count
 
         logging.info("sort all message")
-        self.favorite_msg = sorted(self.all_messages, key=sort_msg, reverse=True)
+        self.favorite_msg = sorted(
+            self.all_messages,
+            key=sort_msg,
+            reverse=True)
         if len(self.favorite_msg) > self.limit_msg_send:
             self.favorite_msg = self.favorite_msg[:self.limit_msg_send]
+        self.all_messages.clear()
 
     async def send_message(self) -> None:
         """
@@ -177,25 +181,27 @@ class Handler():
                 logging.info("send_message")
                 if type(message) == list:
                     await self.client.send_message(
-                        self.my_channel, file=message, message=message[0].message
+                        self.my_channel, file=message,
+                        message=message[0].message
                     )
                     logging.info(
-                        f"from-{message[0].peer_id.channel_id}, date-{message[0].date}"
+                        f"from-{message[0].peer_id.channel_id}, "
+                        f"date-{message[0].date}"
                     )
                 else:
-                    await self.client.send_message(entity=self.my_channel, message=message)
+                    await self.client.send_message(entity=self.my_channel,
+                                                   message=message)
                     logging.info(f"from-{message.peer_id.channel_id}, "
                                 f"date-{message.date}")
                 logging.info(time_to_send_list)
                 await asyncio.sleep(time_to_send_list.pop())
             except errors.rpcerrorlist.FileReferenceExpiredError:
-                logging.error("The file reference has expired and is no longer valid or "
-                              "it belongs to self-destructing media and cannot be resent "
-                              "(caused by SendMediaRequest)")
+                logging.error("The file reference has expired and is no longer"
+                              "valid or it belongs to self-destructing media "
+                              "and cannot be resent(caused by SendMediaRequest)")
                 logging.info(time_to_send_list)
                 await asyncio.sleep(time_to_send_list.pop())
         time_to_send_list.clear()
-
 
     async def handling(self) -> None:
         """
